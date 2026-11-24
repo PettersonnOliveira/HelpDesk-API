@@ -13,6 +13,7 @@ public record TicketResponseDTO(
         LocalDateTime createdAt,
         UserResponseDTO user) {
     public TicketResponseDTO(Ticket ticket) {
-        this(ticket.getId(), ticket.getTitle(), ticket.getDescription(), ticket.getStatus(), ticket.getCreatedAt(), new UserResponseDTO(ticket.getUser()));
+        this(ticket.getId(), ticket.getTitle(), ticket.getDescription(), ticket.getStatus(), ticket.getCreatedAt(),
+                ticket.getUser() != null ? new UserResponseDTO(ticket.getUser()) : null);
     };
 }

@@ -4,14 +4,14 @@ import com.portfolio.HelpDesk_API.Exceptions.BusinessRuleException;
 import com.portfolio.HelpDesk_API.Exceptions.ResourceNotFoundException;
 import com.portfolio.HelpDesk_API.Repositories.CommentsRepository;
 import com.portfolio.HelpDesk_API.Repositories.TicketRepository;
-import com.portfolio.HelpDesk_API.Repositories.UserRepository;
+import com.portfolio.HelpDesk_API.Security.SecurityUtils;
 import com.portfolio.HelpDesk_API.dtos.CommentsRequestDTO;
 import com.portfolio.HelpDesk_API.dtos.CommentsResponseDTO;
 import com.portfolio.HelpDesk_API.entities.Comments;
 import com.portfolio.HelpDesk_API.entities.Status;
 import com.portfolio.HelpDesk_API.entities.Ticket;
+import com.portfolio.HelpDesk_API.entities.User;
 import org.springframework.stereotype.Service;
-
 
 import java.util.List;
 
@@ -19,34 +19,39 @@ import java.util.List;
 public class CommentService {
     private final CommentsRepository commentsRepository;
     private final TicketRepository ticketRepository;
-    private final UserRepository userRepository;
 
-    public CommentService(CommentsRepository commentsRepository, TicketRepository ticketRepository, UserRepository userRepository) {
+    public CommentService(CommentsRepository commentsRepository, TicketRepository ticketRepository) {
         this.commentsRepository = commentsRepository;
         this.ticketRepository = ticketRepository;
-        this.userRepository = userRepository;
     }
 
     public CommentsResponseDTO criar(CommentsRequestDTO inputData){
-        Long ticketId = inputData.ticketId();
-
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new ResourceNotFoundException("Ticket não encontrado"));
+        Ticket ticket = findTicketWithAccessCheck(inputData.ticketId());
 
         if (ticket.getStatus() == Status.CLOSED){
             throw new BusinessRuleException("Não é possível adicionar comentários a um ticket fechado.");
         }
 
+        User user = SecurityUtils.getCurrentUser();
         Comments comments = new Comments(inputData);
         comments.setTicket(ticket);
+        comments.setUser(user);
         Comments commentsSalva = commentsRepository.save(comments);
         return new CommentsResponseDTO(commentsSalva);
     }
 
     public List<CommentsResponseDTO> listByTicket(Long ticketId) {
-        List<Comments> comments = commentsRepository.findByTicketId(ticketId);
+        Ticket ticket = findTicketWithAccessCheck(ticketId);
+        List<Comments> comments = commentsRepository.findByTicketId(ticket.getId());
         return comments.stream()
                 .map(CommentsResponseDTO::new)
                 .toList();
+    }
+
+    private Ticket findTicketWithAccessCheck(Long ticketId){
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket não encontrado"));
+        SecurityUtils.requireTicketAccess(ticket);
+        return ticket;
     }
 }

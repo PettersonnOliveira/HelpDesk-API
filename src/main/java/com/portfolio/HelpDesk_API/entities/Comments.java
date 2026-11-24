@@ -19,6 +19,10 @@ public class Comments {
     @JoinColumn(name = "ticket_id")
     private Ticket ticket;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
      public Comments(){
     }
 
@@ -58,6 +62,14 @@ public class Comments {
 
     public void setTicket(Ticket ticket) {
         this.ticket = ticket;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     @Override

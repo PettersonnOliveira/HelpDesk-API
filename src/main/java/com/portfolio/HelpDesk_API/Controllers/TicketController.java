@@ -5,6 +5,7 @@ import com.portfolio.HelpDesk_API.dtos.TicketRequestDTO;
 import com.portfolio.HelpDesk_API.dtos.TicketResponseDTO;
 import com.portfolio.HelpDesk_API.dtos.TicketUpdateDTO;
 import com.portfolio.HelpDesk_API.entities.Status;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +21,7 @@ public class TicketController {
         this.ticketService = ticketService;
     }
     @PostMapping
-    public ResponseEntity<TicketResponseDTO> criar(@RequestBody TicketRequestDTO inputData){
+    public ResponseEntity<TicketResponseDTO> criar(@RequestBody @Valid TicketRequestDTO inputData){
         TicketResponseDTO ticketResponseDTO = ticketService.criar(inputData);
         return ResponseEntity.status(HttpStatus.CREATED).body(ticketResponseDTO);
     }
@@ -40,6 +41,11 @@ public class TicketController {
         public ResponseEntity<TicketResponseDTO> update (@PathVariable Long id, @RequestBody TicketUpdateDTO inputData){
         TicketResponseDTO ticketResponseDTO = ticketService.update(id,inputData);
         return ResponseEntity.ok(ticketResponseDTO);
+    }
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id){
+        ticketService.delete(id);
+        return ResponseEntity.noContent().build();
     }
     @GetMapping("/status/{status}")
     public ResponseEntity<List<TicketResponseDTO>> findByStatus(@PathVariable Status status){
