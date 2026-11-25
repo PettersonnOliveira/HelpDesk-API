@@ -3,6 +3,7 @@ package com.portfolio.HelpDesk_API;
 import com.portfolio.HelpDesk_API.Exceptions.BusinessRuleException;
 import com.portfolio.HelpDesk_API.Exceptions.ResourceNotFoundException;
 import com.portfolio.HelpDesk_API.Repositories.TicketRepository;
+import com.portfolio.HelpDesk_API.Services.TicketAccessService;
 import com.portfolio.HelpDesk_API.Services.TicketService;
 import com.portfolio.HelpDesk_API.dtos.TicketRequestDTO;
 import com.portfolio.HelpDesk_API.dtos.TicketResponseDTO;
@@ -37,7 +38,7 @@ class TicketServiceTest {
     @BeforeEach
     void setUp() {
         ticketRepository = mock(TicketRepository.class);
-        ticketService = new TicketService(ticketRepository);
+        ticketService = new TicketService(ticketRepository, new TicketAccessService(ticketRepository));
 
         client = new User("Cliente", "cliente@mail.com", "123456", Role.CLIENT);
         client.setId(1L);
@@ -60,11 +61,11 @@ class TicketServiceTest {
     }
 
     @Test
-    void criarDeveIgnorarUserIdDoBodyEVincularUsuarioAutenticado() {
+    void criarVinculaUsuarioAutenticado() {
         authenticateAs(client);
         when(ticketRepository.save(any(Ticket.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TicketRequestDTO dto = new TicketRequestDTO("Titulo", "Desc", 999L);
+        TicketRequestDTO dto = new TicketRequestDTO("Titulo", "Desc");
         TicketResponseDTO response = ticketService.criar(dto);
 
         ArgumentCaptor<Ticket> captor = ArgumentCaptor.forClass(Ticket.class);

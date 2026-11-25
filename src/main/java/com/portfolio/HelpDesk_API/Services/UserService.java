@@ -40,14 +40,11 @@ public class UserService {
     }
 
     public UserResponseDTO findById(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
-        return new UserResponseDTO(user);
+        return new UserResponseDTO(findUserOrThrow(id));
     }
 
     public UserResponseDTO update(Long id, UserUpdateDTO updateDTO) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
+        User user = findUserOrThrow(id);
 
         if (updateDTO.name() != null && !updateDTO.name().isBlank()) {
             user.setName(updateDTO.name());
@@ -64,8 +61,11 @@ public class UserService {
     }
 
     public void delete(Long id) {
-        User user = userRepository.findById(id)
+        userRepository.delete(findUserOrThrow(id));
+    }
+
+    private User findUserOrThrow(Long id) {
+        return userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
-        userRepository.delete(user);
     }
 }

@@ -6,8 +6,27 @@ let allTickets = [];
 let activeFilter = 'ALL';
 let activeTicketForComments = null;
 
+const STATUS_LABELS = {
+  OPEN: 'Aberto',
+  IN_PROGRESS: 'Em Andamento',
+  CLOSED: 'Finalizado'
+};
+
+const STATUS_BADGE_CLASSES = {
+  OPEN: 'badge-open',
+  IN_PROGRESS: 'badge-in-progress',
+  CLOSED: 'badge-closed'
+};
+
+const STATUS_ICONS = {
+  OPEN: 'circle',
+  IN_PROGRESS: 'hourglass-high',
+  CLOSED: 'check'
+};
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+  pingServerOnLoad();
   restoreSession();
 });
 
@@ -48,71 +67,65 @@ function switchAuthTab(tab) {
   }
 }
 
-async function handleLogin(event) {
-  event.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const btn = document.getElementById('btn-login');
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Entrando...';
+async function submitAuth({ endpoint, payload, button, loadingHtml, idleHtml, successMessage, fallbackError }) {
+  button.disabled = true;
+  button.innerHTML = loadingHtml;
 
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await apiFetch(`${API_BASE}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
       const err = await parseError(res);
-      throw new Error(err || 'Falha ao autenticar');
+      throw new Error(err || fallbackError);
     }
 
     const data = await res.json();
     saveSession(data.token, data.user);
-    showToast('Login realizado com sucesso!', 'success');
+    showToast(successMessage, 'success');
     renderDashboard();
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span>Acessar Painel</span> <i class="ph ph-arrow-right"></i>';
+    button.disabled = false;
+    button.innerHTML = idleHtml;
   }
+}
+
+async function handleLogin(event) {
+  event.preventDefault();
+  await submitAuth({
+    endpoint: '/auth/login',
+    payload: {
+      email: document.getElementById('login-email').value.trim(),
+      password: document.getElementById('login-password').value
+    },
+    button: document.getElementById('btn-login'),
+    loadingHtml: '<i class="ph ph-spinner ph-spin"></i> Entrando...',
+    idleHtml: '<span>Acessar Painel</span> <i class="ph ph-arrow-right"></i>',
+    successMessage: 'Login realizado com sucesso!',
+    fallbackError: 'Falha ao autenticar'
+  });
 }
 
 async function handleRegister(event) {
   event.preventDefault();
-  const name = document.getElementById('reg-name').value.trim();
-  const email = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
-  const btn = document.getElementById('btn-register');
-
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Cadastrando...';
-
-  try {
-    const res = await fetch(`${API_BASE}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password })
-    });
-
-    if (!res.ok) {
-      const err = await parseError(res);
-      throw new Error(err || 'Falha ao registrar');
-    }
-
-    const data = await res.json();
-    saveSession(data.token, data.user);
-    showToast('Conta criada com sucesso!', 'success');
-    renderDashboard();
-  } catch (err) {
-    showToast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span>Cadastrar e Entrar</span> <i class="ph ph-check"></i>';
-  }
+  await submitAuth({
+    endpoint: '/auth/register',
+    payload: {
+      name: document.getElementById('reg-name').value.trim(),
+      email: document.getElementById('reg-email').value.trim(),
+      password: document.getElementById('reg-password').value
+    },
+    button: document.getElementById('btn-register'),
+    loadingHtml: '<i class="ph ph-spinner ph-spin"></i> Cadastrando...',
+    idleHtml: '<span>Cadastrar e Entrar</span> <i class="ph ph-check"></i>',
+    successMessage: 'Conta criada com sucesso!',
+    fallbackError: 'Falha ao registrar'
+  });
 }
 
 function saveSession(token, user) {
@@ -228,9 +241,7 @@ function renderTickets() {
           <div class="ticket-controls">
             ${isTechOrAdmin ? `
               <select class="status-select" onchange="handleChangeStatus(${ticket.id}, this.value)">
-                <option value="OPEN" ${ticket.status === 'OPEN' ? 'selected' : ''}>Aberto</option>
-                <option value="IN_PROGRESS" ${ticket.status === 'IN_PROGRESS' ? 'selected' : ''}>Em Andamento</option>
-                <option value="CLOSED" ${ticket.status === 'CLOSED' ? 'selected' : ''}>Finalizado</option>
+                ${renderStatusOptions(ticket.status)}
               </select>
             ` : ''}
             <button class="icon-btn" onclick="openCommentsModal(${ticket.id})" title="Ver Comentários">
@@ -244,16 +255,17 @@ function renderTickets() {
 }
 
 function renderStatusBadge(status) {
-  switch (status) {
-    case 'OPEN':
-      return `<span class="status-badge badge-open"><i class="ph ph-circle"></i> Aberto</span>`;
-    case 'IN_PROGRESS':
-      return `<span class="status-badge badge-in-progress"><i class="ph ph-hourglass-high"></i> Em Andamento</span>`;
-    case 'CLOSED':
-      return `<span class="status-badge badge-closed"><i class="ph ph-check"></i> Finalizado</span>`;
-    default:
-      return `<span class="status-badge">${status || 'N/A'}</span>`;
+  const label = STATUS_LABELS[status];
+  if (!label) {
+    return `<span class="status-badge">${status || 'N/A'}</span>`;
   }
+  return `<span class="status-badge ${STATUS_BADGE_CLASSES[status]}"><i class="ph ph-${STATUS_ICONS[status]}"></i> ${label}</span>`;
+}
+
+function renderStatusOptions(currentStatus) {
+  return Object.entries(STATUS_LABELS)
+    .map(([value, label]) => `<option value="${value}" ${currentStatus === value ? 'selected' : ''}>${label}</option>`)
+    .join('');
 }
 
 function toggleNewTicketPanel() {
@@ -274,16 +286,10 @@ async function handleCreateTicket(event) {
   btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Registrando...';
 
   try {
-    const payload = {
-      title,
-      description,
-      userId: currentUser.id
-    };
-
     const res = await authFetch(`${API_BASE}/tickets`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ title, description })
     });
 
     if (!res.ok) {
@@ -405,13 +411,108 @@ function closeCommentsModal() {
   activeTicketForComments = null;
 }
 
+// ======================= STATUS DO SERVIDOR (COLD START) =======================
+const API_TIMEOUT_MS = 65000;       // folga para o backend terminar de subir
+const SLOW_REQUEST_MS = 3000;        // tempo para exibir o aviso de conexão
+const PING_DELAY_MS = 2500;          // tempo para exibir aviso no ping inicial
+const CONNECTED_FEEDBACK_MS = 2000;  // tempo do "Servidor conectado!"
+
+let serverAwake = false;
+let pendingSlowRequests = 0;
+let bannerTimer = null;
+
+function showServerBanner(message, type = 'info') {
+  const banner = document.getElementById('server-banner');
+  const icon = document.getElementById('server-banner-icon');
+
+  clearTimeout(bannerTimer);
+  document.getElementById('server-banner-text').textContent = message;
+
+  banner.classList.remove('hidden', 'success', 'error', 'info');
+  banner.classList.add(type);
+
+  const iconClass = type === 'success' ? 'ph-check-circle'
+    : type === 'error' ? 'ph-warning-circle'
+    : 'ph-spinner ph-spin';
+  icon.className = `ph ${iconClass}`;
+}
+
+function hideServerBanner() {
+  clearTimeout(bannerTimer);
+  document.getElementById('server-banner').classList.add('hidden');
+}
+
+function scheduleBannerHide(ms) {
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(hideServerBanner, ms);
+}
+
+async function apiFetch(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+  let slowNotified = false;
+  const slowTimer = setTimeout(() => {
+    slowNotified = true;
+    pendingSlowRequests++;
+    showServerBanner('Conectando ao servidor...', 'info');
+  }, SLOW_REQUEST_MS);
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    serverAwake = true;
+    return res;
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error('O servidor demorou muito para responder. Tente novamente em instantes.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    clearTimeout(slowTimer);
+    if (slowNotified) {
+      pendingSlowRequests = Math.max(0, pendingSlowRequests - 1);
+      if (pendingSlowRequests === 0) hideServerBanner();
+    }
+  }
+}
+
+async function pingServerOnLoad() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS + 5000);
+  let notified = false;
+
+  const notifyTimer = setTimeout(() => {
+    notified = true;
+    showServerBanner('Iniciando o servidor na nuvem... O primeiro acesso pode levar até 50 segundos. Aguarde um instante.', 'info');
+  }, PING_DELAY_MS);
+
+  try {
+    await fetch(`${API_BASE}/`, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
+    serverAwake = true;
+    clearTimeout(notifyTimer);
+    if (notified) {
+      showServerBanner('Servidor conectado!', 'success');
+      scheduleBannerHide(CONNECTED_FEEDBACK_MS);
+    }
+  } catch (err) {
+    clearTimeout(notifyTimer);
+    if (notified) {
+      showServerBanner('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.', 'error');
+      scheduleBannerHide(6000);
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // ======================= HELPERS =======================
 async function authFetch(url, options = {}) {
   const headers = options.headers || {};
   if (currentToken) {
     headers['Authorization'] = `Bearer ${currentToken}`;
   }
-  const res = await fetch(url, { ...options, headers });
+  const res = await apiFetch(url, { ...options, headers });
   if (res.status === 401 || res.status === 403) {
     showToast('Sessão expirada. Faça login novamente.', 'error');
     logout();

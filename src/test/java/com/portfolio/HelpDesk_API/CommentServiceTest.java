@@ -4,6 +4,7 @@ import com.portfolio.HelpDesk_API.Exceptions.BusinessRuleException;
 import com.portfolio.HelpDesk_API.Repositories.CommentsRepository;
 import com.portfolio.HelpDesk_API.Repositories.TicketRepository;
 import com.portfolio.HelpDesk_API.Services.CommentService;
+import com.portfolio.HelpDesk_API.Services.TicketAccessService;
 import com.portfolio.HelpDesk_API.dtos.CommentsRequestDTO;
 import com.portfolio.HelpDesk_API.dtos.CommentsResponseDTO;
 import com.portfolio.HelpDesk_API.entities.Comments;
@@ -38,7 +39,7 @@ class CommentServiceTest {
     void setUp() {
         commentsRepository = mock(CommentsRepository.class);
         ticketRepository = mock(TicketRepository.class);
-        commentService = new CommentService(commentsRepository, ticketRepository);
+        commentService = new CommentService(commentsRepository, new TicketAccessService(ticketRepository));
 
         client = new User("Cliente", "cliente@mail.com", "123456", Role.CLIENT);
         client.setId(1L);

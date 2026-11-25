@@ -1,7 +1,6 @@
 package com.portfolio.HelpDesk_API.Services;
 
 import com.portfolio.HelpDesk_API.Exceptions.BusinessRuleException;
-import com.portfolio.HelpDesk_API.Exceptions.ResourceNotFoundException;
 import com.portfolio.HelpDesk_API.Repositories.TicketRepository;
 import com.portfolio.HelpDesk_API.Security.SecurityUtils;
 import com.portfolio.HelpDesk_API.dtos.TicketRequestDTO;
@@ -17,9 +16,11 @@ import java.util.List;
 @Service
 public class TicketService {
     private final TicketRepository ticketRepository;
+    private final TicketAccessService ticketAccessService;
 
-    public TicketService(TicketRepository ticketRepository) {
+    public TicketService(TicketRepository ticketRepository, TicketAccessService ticketAccessService) {
         this.ticketRepository = ticketRepository;
+        this.ticketAccessService = ticketAccessService;
     }
 
     public TicketResponseDTO criar(TicketRequestDTO inputData){
@@ -42,12 +43,12 @@ public class TicketService {
     }
 
     public TicketResponseDTO findById(Long id){
-        Ticket ticket = findTicketWithAccessCheck(id);
+        Ticket ticket = ticketAccessService.findTicketWithAccessCheck(id);
         return new TicketResponseDTO(ticket);
     }
 
     public TicketResponseDTO update(Long id, TicketUpdateDTO inputData){
-        Ticket ticket = findTicketWithAccessCheck(id);
+        Ticket ticket = ticketAccessService.findTicketWithAccessCheck(id);
 
         if (inputData.title() != null && !inputData.title().isBlank()) {
             ticket.setTitle(inputData.title());
@@ -67,7 +68,7 @@ public class TicketService {
     }
 
     public void delete(Long id){
-        Ticket ticket = findTicketWithAccessCheck(id);
+        Ticket ticket = ticketAccessService.findTicketWithAccessCheck(id);
         User user = SecurityUtils.getCurrentUser();
         boolean isOwner = ticket.getUser().getId().equals(user.getId());
 
@@ -86,12 +87,5 @@ public class TicketService {
         return tickets.stream()
                 .map(TicketResponseDTO::new)
                 .toList();
-    }
-
-    private Ticket findTicketWithAccessCheck(Long id){
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Ticket não encontrado"));
-        SecurityUtils.requireTicketAccess(ticket);
-        return ticket;
     }
 }

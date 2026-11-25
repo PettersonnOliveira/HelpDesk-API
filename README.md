@@ -4,39 +4,44 @@
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen)
-![MySQL](https://img.shields.io/badge/MySQL-8.x-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
+![JWT](https://img.shields.io/badge/Auth-JWT-purple)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 </div>
 
-API REST para gerenciamento de tickets de suporte. O projeto foi desenvolvido em Java com Spring Boot e permite cadastrar usuários, abrir chamados, atualizar o andamento do atendimento e registrar comentários.
+API REST para gerenciamento de chamados de suporte, desenvolvida em Java com Spring Boot. Permite cadastro e autenticação de usuários via JWT, abertura de chamados, atualização de status, comentários e controle de acesso por perfil.
 
 ## Visão geral
 
-Este sistema simula um help desk simples, com foco em relações entre usuários e tickets. A aplicação expõe endpoints REST para operações de CRUD e filtros por status.
+O sistema simula um help desk com três perfis de usuário:
+
+- **CLIENT**: abre chamados, acompanha apenas os próprios e comenta neles.
+- **TECHNICIAN**: visualiza todos os chamados, altera status e comenta em qualquer chamado.
+- **ADMIN**: mesmas permissões do técnico, além de gerenciar usuários.
+
+A aplicação também serve um frontend estático (HTML/CSS/JS) em `src/main/resources/static`, acessível na raiz da aplicação.
 
 ## Stack utilizada
 
 - Java 21
 - Spring Boot 4.1.1
-- Spring Web
+- Spring Web MVC
 - Spring Data JPA
-- MySQL
+- Spring Security + JWT (jjwt 0.12.6)
+- Bean Validation
+- PostgreSQL
 - Maven
-- Validation
 
 ## Funcionalidades
 
-- Cadastro de usuários
-- Listagem de usuários
-- Busca por ID
-- Criação de tickets
-- Listagem de tickets
-- Busca de ticket por ID
-- Atualização de ticket
-- Filtro por status
-- Registro e listagem de comentários
-- Regras de negócio para impedir comentários em tickets fechados
+- Registro e login com emissão de token JWT
+- CRUD de usuários (restrito a ADMIN)
+- Criação, listagem, busca, atualização e exclusão de chamados
+- Filtro de chamados por status
+- Registro e listagem de comentários por chamado
+- Controle de acesso por perfil (cliente só acessa os próprios chamados)
+- Tratamento centralizado de erros e validações
 
 ## Estrutura do projeto
 
@@ -48,48 +53,59 @@ HelpDesk-API/
 │   │   │   ├── Controllers/
 │   │   │   ├── Services/
 │   │   │   ├── Repositories/
+│   │   │   ├── Security/
 │   │   │   ├── entities/
 │   │   │   ├── dtos/
 │   │   │   ├── Exceptions/
 │   │   │   └── HelpDeskApiApplication.java
 │   │   └── resources/
+│   │       ├── static/          # frontend (index.html, app.js, style.css)
 │   │       └── application.properties
-│   └── test/
-│       └── java/com/portfolio/HelpDesk_API/
+│   └── test/java/com/portfolio/HelpDesk_API/
+├── .env.example
+├── Dockerfile
 ├── pom.xml
 ├── mvnw
-├── mvnw.cmd
-├── HELP.md
-├── .gitignore
 └── README.md
 ```
 
 ## Requisitos
 
-Antes de rodar o projeto, verifique se você possui:
-
 - JDK 21+
-- Maven
-- MySQL instalado e rodando
-- IDE opcional: IntelliJ IDEA / VS Code / Eclipse
+- PostgreSQL
+- Maven (ou usar o wrapper `./mvnw`)
 
-## Configuração local
+## Configuração
 
-No arquivo `src/main/resources/application.properties`, configure a conexão com o banco:
+A aplicação lê as configurações de ambiente (veja `.env.example`):
+
+| Variável | Descrição |
+| --- | --- |
+| `DB_URL` | URL JDBC do PostgreSQL, ex.: `jdbc:postgresql://host:5432/helpdesk?sslmode=require` |
+| `DB_USER` | Usuário do banco |
+| `DB_PASSWORD` | Senha do banco |
+| `PORT` | Porta HTTP (padrão `8080`) |
+| `JWT_SECRET` | Segredo usado para assinar os tokens (mínimo 32 caracteres) |
+
+O `application.properties` apenas referencia essas variáveis:
 
 ```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/HelpDesk-API_db?createDatabaseIfNotExist=true
-spring.datasource.username=root
-spring.datasource.password=sua_senha
+server.port=${PORT:8080}
+
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USER}
+spring.datasource.password=${DB_PASSWORD}
+
 spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+api.security.token.secret=${JWT_SECRET}
+api.security.token.expiration-millis=86400000
 ```
 
-> Se o banco não existir, o parâmetro `createDatabaseIfNotExist=true` tenta criá-lo automaticamente.
+> Gere um segredo forte para `JWT_SECRET`, por exemplo com `openssl rand -base64 48`.
 
 ## Como executar
-
-Na raiz do projeto, execute:
 
 ```bash
 ./mvnw spring-boot:run
@@ -101,23 +117,25 @@ No Windows:
 mvnw.cmd spring-boot:run
 ```
 
-A aplicação estará disponível em:
+A aplicação (API + frontend) estará disponível em:
 
 ```text
 http://localhost:8080
 ```
 
-## Endpoints da API
+## Autenticação
 
-### Usuários
-
-#### 1. Criar usuário
+Rotas públicas: `POST /auth/register` e `POST /auth/login`. As demais exigem o header:
 
 ```http
-POST /users
+Authorization: Bearer <token>
 ```
 
-Body exemplo:
+### Registro
+
+```http
+POST /auth/register
+```
 
 ```json
 {
@@ -127,56 +145,89 @@ Body exemplo:
 }
 ```
 
-#### 2. Listar usuários
+O registro público sempre cria um usuário com perfil `CLIENT`.
+
+### Login
 
 ```http
-GET /users
+POST /auth/login
 ```
 
-#### 3. Buscar usuário por ID
-
-```http
-GET /users/{id}
+```json
+{
+  "email": "maria@email.com",
+  "password": "123456"
+}
 ```
 
-### Tickets
+Resposta:
 
-#### 1. Criar ticket
-
-```http
-POST /tickets
+```json
+{
+  "token": "eyJhbGciOi...",
+  "tokenType": "Bearer",
+  "user": {
+    "id": 1,
+    "name": "Maria Silva",
+    "email": "maria@email.com",
+    "role": "CLIENT"
+  }
+}
 ```
 
-Body exemplo:
+## Endpoints
+
+### Usuários (somente ADMIN)
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `POST` | `/users` | Cria usuário |
+| `GET` | `/users` | Lista usuários |
+| `GET` | `/users/{id}` | Busca usuário por ID |
+| `PUT` | `/users/{id}` | Atualiza nome/e-mail |
+| `DELETE` | `/users/{id}` | Remove usuário |
+
+Body de criação:
+
+```json
+{
+  "name": "João Souza",
+  "email": "joao@email.com",
+  "password": "123456",
+  "role": "TECHNICIAN"
+}
+```
+
+Body de atualização:
+
+```json
+{
+  "name": "João Souza",
+  "email": "joao.souza@email.com"
+}
+```
+
+### Chamados
+
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `POST` | `/tickets` | Cria chamado (dono = usuário autenticado) |
+| `GET` | `/tickets` | Lista chamados (cliente vê só os próprios) |
+| `GET` | `/tickets/{id}` | Busca chamado por ID |
+| `PUT` | `/tickets/{id}` | Atualiza título/descrição (status só staff) |
+| `DELETE` | `/tickets/{id}` | Remove chamado |
+| `GET` | `/tickets/status/{status}` | Filtra por status |
+
+Body de criação (o dono vem do token, não do body):
 
 ```json
 {
   "title": "Erro ao acessar painel",
-  "description": "O usuário não consegue entrar no sistema",
-  "status": "OPEN",
-  "userId": 1
+  "description": "O usuário não consegue entrar no sistema"
 }
 ```
 
-#### 2. Listar tickets
-
-```http
-GET /tickets
-```
-
-#### 3. Buscar ticket por ID
-
-```http
-GET /tickets/{id}
-```
-
-#### 4. Atualizar ticket
-
-```http
-PUT /tickets/{id}
-```
-
-Body exemplo:
+Body de atualização:
 
 ```json
 {
@@ -186,13 +237,7 @@ Body exemplo:
 }
 ```
 
-#### 5. Filtrar tickets por status
-
-```http
-GET /tickets/status/{status}
-```
-
-Exemplos:
+Exemplos de filtro:
 
 ```http
 GET /tickets/status/OPEN
@@ -202,31 +247,21 @@ GET /tickets/status/CLOSED
 
 ### Comentários
 
-#### 1. Criar comentário
+| Método | Rota | Descrição |
+| --- | --- | --- |
+| `POST` | `/comments` | Cria comentário em um chamado |
+| `GET` | `/comments/tickets/{id}/comments` | Lista comentários do chamado |
 
-```http
-POST /comments
-```
-
-Body exemplo:
+Body de criação:
 
 ```json
 {
-  "description": "Já verifiquei o login e o problema está relacionado à configuração do ambiente.",
-  "ticketId": 1,
-  "userId": 1
+  "message": "Já verifiquei o login e o problema está relacionado à configuração do ambiente.",
+  "ticketId": 1
 }
 ```
 
-#### 2. Listar comentários de um ticket
-
-```http
-GET /comments/tickets/{id}/comments
-```
-
-## Enum de status
-
-Os tickets utilizam o seguinte enum:
+## Enums
 
 ```java
 public enum Status {
@@ -234,27 +269,49 @@ public enum Status {
     IN_PROGRESS,
     CLOSED
 }
+
+public enum Role {
+    ADMIN,
+    CLIENT,
+    TECHNICIAN
+}
 ```
 
 ## Regras de negócio
 
-- Um comentário só pode ser adicionado se o ticket não estiver fechado.
-- O status do ticket pode ser alterado através da rota de atualização.
-- A API trabalha com relacionamento entre `User`, `Ticket` e `Comments`.
+- Um cliente só enxerga e acessa os próprios chamados.
+- Apenas ADMIN e TECHNICIAN podem alterar o status de um chamado.
+- Um cliente só pode excluir chamados próprios que ainda estejam com status `OPEN`.
+- Não é possível comentar em chamado com status `CLOSED`.
+- O dono do chamado é sempre o usuário autenticado (o `userId` não é aceito no body).
+- E-mail é único por usuário.
+- O gerenciamento de usuários (`/users`) é restrito a ADMIN.
 
-## Observações
+## Tratamento de erros
 
-- Esse projeto foi pensado como um exemplo de aplicação REST com Java e Spring Boot.
-- Não há autenticação JWT implementada neste momento.
-- A API está pronta para uso local e estudo de arquitetura, endpoints e regras de negócio.
+O `GlobalExceptionHandler` padroniza as respostas:
 
-## Próximos passos sugeridos
+| Situação | Status HTTP |
+| --- | --- |
+| Recurso não encontrado | `404` |
+| Regra de negócio violada | `400` |
+| Credenciais inválidas | `401` |
+| Erros de validação | `400` (mapa campo → mensagem) |
 
-- Implementar autenticação com JWT
-- Adicionar paginação e ordenação
-- Criar testes automatizados com JUnit e MockMvc
-- Melhorar tratamento de erros e validações
-- Documentar endpoints com Swagger/OpenAPI
+## Testes
+
+```bash
+./mvnw test
+```
+
+Cobrem as regras principais de `TicketService` e `CommentService` (controle de acesso, atualização parcial, exclusão e comentários em chamados fechados).
+
+## Docker
+
+```bash
+docker build -t helpdesk-api .
+docker run --env-file .env -p 8080:8080 helpdesk-api
+```
 
 ## Licença
 

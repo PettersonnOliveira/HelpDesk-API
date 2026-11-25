@@ -1,9 +1,7 @@
 package com.portfolio.HelpDesk_API.Services;
 
 import com.portfolio.HelpDesk_API.Exceptions.BusinessRuleException;
-import com.portfolio.HelpDesk_API.Exceptions.ResourceNotFoundException;
 import com.portfolio.HelpDesk_API.Repositories.CommentsRepository;
-import com.portfolio.HelpDesk_API.Repositories.TicketRepository;
 import com.portfolio.HelpDesk_API.Security.SecurityUtils;
 import com.portfolio.HelpDesk_API.dtos.CommentsRequestDTO;
 import com.portfolio.HelpDesk_API.dtos.CommentsResponseDTO;
@@ -18,15 +16,15 @@ import java.util.List;
 @Service
 public class CommentService {
     private final CommentsRepository commentsRepository;
-    private final TicketRepository ticketRepository;
+    private final TicketAccessService ticketAccessService;
 
-    public CommentService(CommentsRepository commentsRepository, TicketRepository ticketRepository) {
+    public CommentService(CommentsRepository commentsRepository, TicketAccessService ticketAccessService) {
         this.commentsRepository = commentsRepository;
-        this.ticketRepository = ticketRepository;
+        this.ticketAccessService = ticketAccessService;
     }
 
     public CommentsResponseDTO criar(CommentsRequestDTO inputData){
-        Ticket ticket = findTicketWithAccessCheck(inputData.ticketId());
+        Ticket ticket = ticketAccessService.findTicketWithAccessCheck(inputData.ticketId());
 
         if (ticket.getStatus() == Status.CLOSED){
             throw new BusinessRuleException("Não é possível adicionar comentários a um ticket fechado.");
@@ -41,17 +39,10 @@ public class CommentService {
     }
 
     public List<CommentsResponseDTO> listByTicket(Long ticketId) {
-        Ticket ticket = findTicketWithAccessCheck(ticketId);
+        Ticket ticket = ticketAccessService.findTicketWithAccessCheck(ticketId);
         List<Comments> comments = commentsRepository.findByTicketId(ticket.getId());
         return comments.stream()
                 .map(CommentsResponseDTO::new)
                 .toList();
-    }
-
-    private Ticket findTicketWithAccessCheck(Long ticketId){
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new ResourceNotFoundException("Ticket não encontrado"));
-        SecurityUtils.requireTicketAccess(ticket);
-        return ticket;
     }
 }
