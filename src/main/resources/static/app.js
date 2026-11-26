@@ -497,7 +497,7 @@ async function pingServerOnLoad() {
   }, PING_DELAY_MS);
 
   try {
-    const res = await fetch(`${API_BASE}/`, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
+    const res = await fetch(`${API_BASE}/`, { method: 'GET', cache: 'no-store', signal: controller.signal });
     serverAwake = true;
     clearTimeout(notifyTimer);
     if (res.status > 0) {
