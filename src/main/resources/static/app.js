@@ -1,5 +1,7 @@
 // Estado Global
-const API_BASE = '';
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? ''
+  : 'https://helpdesk-mor9.onrender.com';
 let currentUser = null;
 let currentToken = null;
 let allTickets = [];
@@ -412,7 +414,7 @@ function closeCommentsModal() {
 }
 
 // ======================= STATUS DO SERVIDOR (COLD START) =======================
-const API_TIMEOUT_MS = 65000;       // folga para o backend terminar de subir
+const API_TIMEOUT_MS = 70000;       // folga para o backend terminar de subir
 const SLOW_REQUEST_MS = 3000;        // tempo para exibir o aviso de conexão
 const PING_DELAY_MS = 2500;          // tempo para exibir aviso no ping inicial
 const CONNECTED_FEEDBACK_MS = 2000;  // tempo do "Servidor conectado!"
@@ -461,6 +463,12 @@ async function apiFetch(url, options = {}) {
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
     serverAwake = true;
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
+    if (res.status > 0) {
+      hideServerBanner();
+    }
     return res;
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -474,26 +482,26 @@ async function apiFetch(url, options = {}) {
       pendingSlowRequests = Math.max(0, pendingSlowRequests - 1);
       if (pendingSlowRequests === 0) hideServerBanner();
     }
+    hideServerBanner();
   }
 }
 
 async function pingServerOnLoad() {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS + 5000);
+  const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   let notified = false;
 
   const notifyTimer = setTimeout(() => {
     notified = true;
-    showServerBanner('Iniciando o servidor na nuvem... O primeiro acesso pode levar até 50 segundos. Aguarde um instante.', 'info');
+    showServerBanner('Iniciando o servidor na nuvem... O primeiro acesso pode levar até 50 segundos.', 'info');
   }, PING_DELAY_MS);
 
   try {
-    await fetch(`${API_BASE}/`, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
+    const res = await fetch(`${API_BASE}/`, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
     serverAwake = true;
     clearTimeout(notifyTimer);
-    if (notified) {
-      showServerBanner('Servidor conectado!', 'success');
-      scheduleBannerHide(CONNECTED_FEEDBACK_MS);
+    if (res.status > 0) {
+      hideServerBanner();
     }
   } catch (err) {
     clearTimeout(notifyTimer);
@@ -503,19 +511,30 @@ async function pingServerOnLoad() {
     }
   } finally {
     clearTimeout(timeoutId);
+    if (!notified) {
+      hideServerBanner();
+    }
   }
 }
 
 // ======================= HELPERS =======================
+function handleUnauthorized() {
+  localStorage.removeItem('helpdesk_token');
+  localStorage.removeItem('helpdesk_user');
+  currentToken = null;
+  currentUser = null;
+  showAuthScreen();
+}
+
 async function authFetch(url, options = {}) {
   const headers = options.headers || {};
   if (currentToken) {
     headers['Authorization'] = `Bearer ${currentToken}`;
   }
   const res = await apiFetch(url, { ...options, headers });
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
+    handleUnauthorized();
     showToast('Sessão expirada. Faça login novamente.', 'error');
-    logout();
   }
   return res;
 }
